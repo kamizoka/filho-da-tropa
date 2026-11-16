@@ -3,10 +3,27 @@ from discord.ext import commands
 import os
 import random
 import asyncio
+import threading
+from flask import Flask
 from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+
+# ===== KEEP-ALIVE - deixa o bot com porta aberta pro Render nao dormir =====
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "TENGU BOT ON - TROPA REINA"
+
+def rodar_site():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+def keep_alive():
+    t = threading.Thread(target=rodar_site, daemon=True)
+    t.start()
 
 intents = discord.Intents.default()
 intents.members = True
@@ -116,7 +133,6 @@ class AceitarView(discord.ui.View):
         self.aceito = True
         jogador2 = interaction.user
         await interaction.response.send_message(f"{jogador2.mention} ACEITOU! O X1 vai comecar!")
-        # Apaga painel de convite pra nao sujar o chat
         try:
             await interaction.message.delete()
         except:
@@ -157,7 +173,6 @@ class EscolhaSimultaneaView(discord.ui.View):
         nomes = {"atacar": "ATACAR", "defender": "DEFENDER", "curar": "CURAR"}
         await interaction.response.send_message(f"Voce escolheu {nomes[escolha]}... ninguem viu. Espera o outro escolher.", ephemeral=True)
         if len(self.jogo["escolhas"]) == 2:
-            # Apaga painel de escolha e manda painel de rolar
             await apagar_painel_antigo(self.jogo)
             embed = discord.Embed(title="HORA DE ROLAR O DADO! - TODO MUNDO JUNTO", description="Os 2 ja escolheram! Agora os 2 rolam o dado.", color=0xFFD700)
             embed.add_field(name="Jogadores", value=f"{self.jogo['jogadores'][0].mention} e {self.jogo['jogadores'][1].mention} - cliquem em ROLAR!", inline=False)
@@ -207,7 +222,6 @@ class RolarSimultaneoView(discord.ui.View):
         global x1_ativo
         jogo = self.jogo
         canal = self.canal
-        # Apaga painel de rolar antes de mandar resultado
         await apagar_painel_antigo(jogo)
         p0, p1 = jogo["jogadores"]
         e0, e1 = jogo["escolhas"].get(0, "atacar"), jogo["escolhas"].get(1, "atacar")
@@ -222,12 +236,10 @@ class RolarSimultaneoView(discord.ui.View):
                 cura[i] = dad * 6
             elif esc == "atacar":
                 dano_bruto[i] = dad * 5
-        # Dano final depois do escudo do oponente - defesa segura na hora
         dano_final = [0, 0]
         dano_final[0] = max(0, dano_bruto[1] - escudo[0])
         dano_final[1] = max(0, dano_bruto[0] - escudo[1])
         escudo_usado = [min(escudo[0], dano_bruto[1]), min(escudo[1], dano_bruto[0])]
-        # Aplica dano e cura, trava em 0-100
         jogo["vida"][0] = max(0, min(100, jogo["vida"][0] - dano_final[0] + cura[0]))
         jogo["vida"][1] = max(0, min(100, jogo["vida"][1] - dano_final[1] + cura[1]))
         nomes = {"atacar": "ATACOU", "defender": "DEFENDEU", "curar": "CUROU"}
@@ -270,4 +282,5 @@ async def x1(ctx):
     view = AceitarView(ctx.author, ctx.channel)
     await ctx.send(embed=embed, view=view)
 
+keep_alive()
 bot.run(TOKEN)
