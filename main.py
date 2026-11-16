@@ -4,6 +4,7 @@ import os
 import random
 import asyncio
 import threading
+import json
 from flask import Flask
 from dotenv import load_dotenv
 
@@ -35,6 +36,39 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 x1_ativo = False
 x1_jogo = {}
 
+# ===== PLACAR X1 - salva em placar.json =====
+ARQUIVO_PLACAR = "placar.json"
+
+def carregar_placar():
+    try:
+        with open(ARQUIVO_PLACAR, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def salvar_placar(placar):
+    try:
+        with open(ARQUIVO_PLACAR, "w", encoding="utf-8") as f:
+            json.dump(placar, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Erro ao salvar placar: {e}")
+
+def pegar_stats(placar, user):
+    dados = placar.get(str(user.id), {"nome": user.display_name, "vitorias": 0, "derrotas": 0})
+    dados["nome"] = user.display_name
+    return dados
+
+def registrar_resultado(vencedor, perdedor):
+    placar = carregar_placar()
+    v = pegar_stats(placar, vencedor)
+    d = pegar_stats(placar, perdedor)
+    v["vitorias"] += 1
+    d["derrotas"] += 1
+    placar[str(vencedor.id)] = v
+    placar[str(perdedor.id)] = d
+    salvar_placar(placar)
+    return v, d
+
 @bot.event
 async def on_ready():
     print(f"Logado como {bot.user}")
@@ -51,6 +85,8 @@ async def lista(ctx):
     embed.add_field(name="!raid", value="Manda 10x TROPA REINA (cooldown de 30s)", inline=False)
     embed.add_field(name="!x1", value="Chama alguem pro X1 - os 2 escolhem juntos: atacar / defender / curar, depois rolam juntos", inline=False)
     embed.add_field(name="!lista", value="Mostra essa lista aqui", inline=False)
+    embed.add_field(name="!placarx1", value="Mostra o placar de vitorias / derrotas do X1", inline=False)
+    embed.add_field(name="!placarx1 @pessoa", value="Mostra o placar de uma pessoa especifica", inline=False)
     embed.set_footer(text="Prefixo: !")
     await ctx.send(embed=embed)
 
@@ -255,16 +291,47 @@ class RolarSimultaneoView(discord.ui.View):
             x1_ativo = False
             return
         if v0_morto:
-            await canal.send(embed=discord.Embed(title="FIM DO X1!", description=f"{p1.mention} VENCEU O X1!!!", color=0xFFD700))
+            v_stats, d_stats = registrar_resultado(p1, p0)
+            await canal.send(embed=discord.Embed(title="FIM DO X1!", description=f"{p1.mention} VENCEU O X1!!!\n\n**{p1.display_name}**\nVitorias: {v_stats['vitorias']} | Derrotas: {v_stats['derrotas']}\n\n**{p0.display_name}**\nVitorias: {d_stats['vitorias']} | Derrotas: {d_stats['derrotas']}", color=0xFFD700))
             x1_ativo = False
             return
         if v1_morto:
-            await canal.send(embed=discord.Embed(title="FIM DO X1!", description=f"{p0.mention} VENCEU O X1!!!", color=0xFFD700))
+            v_stats, d_stats = registrar_resultado(p0, p1)
+            await canal.send(embed=discord.Embed(title="FIM DO X1!", description=f"{p0.mention} VENCEU O X1!!!\n\n**{p0.display_name}**\nVitorias: {v_stats['vitorias']} | Derrotas: {v_stats['derrotas']}\n\n**{p1.display_name}**\nVitorias: {d_stats['vitorias']} | Derrotas: {d_stats['derrotas']}", color=0xFFD700))
             x1_ativo = False
             return
         jogo["round"] += 1
         await asyncio.sleep(1)
         await enviar_painel_escolha(canal, jogo)
+
+@bot.command(name="placarx1")
+async def placarx1(ctx, member: discord.Member = None):
+    placar = carregar_placar()
+    # Se marcou alguem, mostra so essa pessoa
+    if member:
+        dados = pegar_stats(placar, member)
+        embed = discord.Embed(title=f"PLACAR X1 - {member.display_name}", color=0xFF8000)
+        embed.add_field(name="Vitorias", value=f"🏆 {dados['vitorias']}", inline=True)
+        embed.add_field(name="Derrotas", value=f"💀 {dados['derrotas']}", inline=True)
+        total = dados['vitorias'] + dados['derrotas']
+        aproveitamento = round(dados['vitorias'] / total * 100) if total > 0 else 0
+        embed.add_field(name="Aproveitamento", value=f"{aproveitamento}% ({total} jogos)", inline=False)
+        await ctx.send(embed=embed)
+        return
+    # Sem marcar ninguem, mostra o ranking
+    if not placar:
+        await ctx.send("Ninguem jogou X1 ainda! Manda um `!x1` pra começar!")
+        return
+    ranking = sorted(placar.values(), key=lambda x: (x["vitorias"], -x["derrotas"]), reverse=True)[:10]
+    embed = discord.Embed(title="🏆 PLACAR X1 - RANKING", description="Top 10 do X1:", color=0xFFD700)
+    texto = ""
+    medalhas = ["🥇", "🥈", "🥉"]
+    for i, dados in enumerate(ranking):
+        medalha = medalhas[i] if i < 3 else f"{i+1}."
+        texto += f"{medalha} **{dados['nome']}** - Vitorias: {dados['vitorias']} | Derrotas: {dados['derrotas']}\n"
+    embed.add_field(name="Ranking", value=texto, inline=False)
+    embed.set_footer(text="Pra ver o teu placar: !placarx1 @tu mesmo")
+    await ctx.send(embed=embed)
 
 @bot.command(name="x1")
 async def x1(ctx):
