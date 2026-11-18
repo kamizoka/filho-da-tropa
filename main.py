@@ -32,6 +32,21 @@ x1_ativo = False
 x1_jogo = {}
 x1_lock = asyncio.Lock()
 
+# ===== CANAL LIMITADO (SO ADM) =====
+ARQUIVO_CONFIG = "config.json"
+def carregar_config():
+    return carregar_json(ARQUIVO_CONFIG)
+def salvar_config(c):
+    salvar_json(ARQUIVO_CONFIG, c)
+def canal_limitado(guild_id):
+    cfg = carregar_config()
+    return cfg.get(str(guild_id), {}).get("canal_limitado")  # None = sem limite, bot fala em todo canal
+def definir_canal_limitado(guild_id, canal_id):
+    cfg = carregar_config()
+    cfg[str(guild_id)] = {"canal_limitado": canal_id}
+    salvar_config(cfg)
+
+
 # ============================================================
 # ===== PERSONAGENS =====
 # Pra adicionar um personagem novo, copia o modelo da Anne e muda
@@ -164,24 +179,6 @@ def registrar_resultado(vencedor, perdedor):
 async def on_ready():
     print(f"Logado como {bot.user}")
 
-@bot.command(name="ping")
-async def ping(ctx):
-    await ctx.send(f"Pong! {round(bot.latency * 1000)}ms")
-
-@bot.command(name="lista")
-async def lista(ctx):
-    embed = discord.Embed(title="LISTA DE COMANDOS - FILHO DA TROPA", description="Todos os comandos do bot:", color=0xFF8000)
-    embed.add_field(name="!ping", value="Ver se o bot ta on e o ping", inline=False)
-    embed.add_field(name="!falar @pessoa frase", value="Manda uma frase com a foto e o nick da pessoa marcada", inline=False)
-    embed.add_field(name="!raid", value="Manda 10x TROPA REINA (cooldown de 30s)", inline=False)
-    embed.add_field(name="!x1", value="Chama alguem pro X1", inline=False)
-    embed.add_field(name="!placarx1", value="Mostra o placar do X1", inline=False)
-    embed.add_field(name="!ajudax1", value="Explica TODOS os comandos do X1 e dos personagens", inline=False)
-    embed.add_field(name="!resgatarpersonagem / !rp CODIGO", value="Resgata um personagem com o codigo que tu ganhou", inline=False)
-    embed.add_field(name="!personagem / !p", value="Mostra o personagem que ta equipado (com a carta, se tiver)", inline=False)
-    embed.add_field(name="!inventario / !i", value="Mostra os personagens que tu tem e deixa equipar", inline=False)
-    embed.set_footer(text="Prefixo: !")
-    await ctx.send(embed=embed)
 
 @bot.command(name="ajudax1")
 async def ajudax1(ctx):
@@ -190,63 +187,92 @@ async def ajudax1(ctx):
     embed.add_field(name="👤 Personagens", value="**!resgatarpersonagem CODIGO** ou **!rp CODIGO** - Resgata um personagem com o codigo que tu ganhou\n**!personagem** ou **!p** - Mostra o personagem que ta **equipado** (mostra a carta dele)\n**!inventario** ou **!i** - Mostra os personagens que tu tem e deixa equipar outro\n\n- Cada personagem tem **20 pontos** divididos em ataque / defesa / cura\n- Tu pode ter no maximo **3 personagens**\n- O codigo pode ser usado por todo mundo, mas **tu nao pode usar o mesmo codigo 2x**\n- Se teu inventario ja ta cheio (3), tu vai ter que **excluir um** pra resgatar outro\n- Sem personagem? Tu joga com o **Personagem Padrao: 6 / 6 / 6**", inline=False)
     embed.add_field(name="⚔️ Como funciona a batalha", value="**Vida: 200** pra cada um\nOs 2 escolhem escondido: **ATACAR / DEFENDER / CURAR**\nDepois os 2 rolam o dado juntos e o round resolve!\n\n**ATACAR:** dado 1-10, dano = **dado x ataque** do teu personagem\nEx: ataque 7 + dado 10 = **70 de dano**\n\n**DEFENDER:** dado 1-10, escudo = **dado x defesa**\nEx: defesa 9 + dado 10 = **90 de escudo**\n\n**CURAR:** dado 1-5, cura = **dado x cura**\nEx: cura 4 + dado 5 = **20 de cura**", inline=False)
     embed.add_field(name="✨ Especial da Anne bastard Family", value="Se ela usar **CURAR 2 rounds seguidos**, a cura dela aumenta **+10%** pelos proximos **2 rounds**.", inline=False)
-    embed.add_field(name="🏆 Placar", value="**!placarx1** - Mostra o ranking do X1\n**!placarx1 @pessoa** - Mostra o placar de uma pessoa especifica", inline=False)
+    embed.add_field(name="🏆 Rank / Perfil", value="**!rank** - Mostra o ranking do X1 (Top 10)\n**!perfil** - Mostra TEU perfil (vitorias, derrotas, personagem equipado)\n**!perfil @pessoa** - Mostra o perfil de outra pessoa", inline=False)
     embed.add_field(name="🏁 Quem ganha?", value="Quem zerar a vida do outro primeiro ganha!\nSe os 2 cairem no mesmo round, da **EMPATE**!", inline=False)
     await ctx.send(embed=embed)
 
-@bot.command(name="falar")
-async def falar(ctx, member: discord.Member = None, *, frase: str = None):
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-    if not member or not frase:
-        return
-    try:
-        webhooks = await ctx.channel.webhooks()
-        for w in webhooks:
-            if w.name == "resenha-falar":
-                await w.delete()
-        webhook = await ctx.channel.create_webhook(name="resenha-falar")
-        await webhook.send(content=frase + " \U0001F440", username=member.display_name, avatar_url=member.display_avatar.url, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
-    except Exception as e:
-        print(f"Erro no !falar: {e}")
-
-@bot.command(name="raid")
-@commands.cooldown(1, 30, commands.BucketType.channel)
-async def raid(ctx):
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-    await ctx.send("TROPA REINA\n" * 10)
-
-@bot.command(name="placarx1")
-async def placarx1(ctx, member: discord.Member = None):
+@bot.command(name="rank")
+async def rank(ctx):
     placar = carregar_placar()
-    if member:
-        dados = pegar_stats(placar, member)
-        embed = discord.Embed(title=f"PLACAR X1 - {member.display_name}", color=0xFF8000)
-        embed.add_field(name="Vitorias", value=f"🏆 {dados['vitorias']}", inline=True)
-        embed.add_field(name="Derrotas", value=f"💀 {dados['derrotas']}", inline=True)
-        total = dados['vitorias'] + dados['derrotas']
-        aproveitamento = round(dados['vitorias'] / total * 100) if total > 0 else 0
-        embed.add_field(name="Aproveitamento", value=f"{aproveitamento}% ({total} jogos)", inline=False)
-        await ctx.send(embed=embed)
-        return
     if not placar:
         await ctx.send("Ninguem jogou X1 ainda! Manda um `!x1` pra começar!")
         return
     ranking = sorted(placar.values(), key=lambda x: (x["vitorias"], -x["derrotas"]), reverse=True)[:10]
-    embed = discord.Embed(title="🏆 PLACAR X1 - RANKING", description="Top 10 do X1:", color=0xFFD700)
+    embed = discord.Embed(title="🏆 **RANK - TOP 10 DO X1**", description="Quem mais vence no X1:", color=0xFFD700)
     texto = ""
     medalhas = ["🥇", "🥈", "🥉"]
     for i, dados in enumerate(ranking):
         medalha = medalhas[i] if i < 3 else f"{i+1}."
-        texto += f"{medalha} **{dados['nome']}** - Vitorias: {dados['vitorias']} | Derrotas: {dados['derrotas']}\n"
+        texto += f"{medalha} **{dados['nome']}** - Vitorias: **{dados['vitorias']}** | Derrotas: {dados['derrotas']}\n"
     embed.add_field(name="Ranking", value=texto, inline=False)
-    embed.set_footer(text="Pra ver o teu placar: !placarx1 @tu mesmo")
+    embed.set_footer(text="Pra ver teu perfil: !perfil")
     await ctx.send(embed=embed)
+
+@bot.command(name="perfil")
+async def perfil(ctx, member: discord.Member = None):
+    alvo = member or ctx.author
+    placar = carregar_placar()
+    dados = pegar_stats(placar, alvo)
+    p = personagem_equipado_de(alvo.id)
+    inv = dados_usuario(alvo.id)
+    total = dados['vitorias'] + dados['derrotas']
+    aproveitamento = round(dados['vitorias'] / total * 100) if total > 0 else 0
+    embed = discord.Embed(title=f"👤 **PERFIL - {alvo.display_name.upper()}**", description=f"**{alvo.mention}**", color=0xFF8000)
+    embed.add_field(name="🏆 Vitorias", value=f"**{dados['vitorias']}**", inline=True)
+    embed.add_field(name="💀 Derrotas", value=f"**{dados['derrotas']}**", inline=True)
+    embed.add_field(name="📊 Aproveitamento", value=f"**{aproveitamento}%** ({total} jogos)", inline=False)
+    embed.add_field(name="👤 Personagem equipado", value=f"**{p['nome']}** - ⚔️ {p['ataque']} | 🛡️ {p['defesa']} | 💚 {p['cura']}", inline=False)
+    embed.add_field(name="🎒 Inventario", value=f"**{len(inv['inventario'])}/3** personagens", inline=False)
+    embed.set_footer(text="Pra ver o rank: !rank | Pra trocar personagem: !i")
+    if p.get("imagem"):
+        embed.set_image(url=p["imagem"])
+    await ctx.send(embed=embed)
+
+@bot.command(name="limitar")
+@commands.has_permissions(administrator=True)
+async def limitar(ctx, canal: discord.TextChannel = None, *, resto: str = None):
+    # !limitar #canal -> limita o bot so nesse canal
+    # !limitar off -> tira o limite, bot volta a falar em todo canal
+    # !limitar -> mostra onde ta limitado agora
+    if resto and resto.strip().lower() in ("off", "desligar", "tirar", "liberar", "nenhum"):
+        definir_canal_limitado(ctx.guild.id, None)
+        await ctx.send(f"✅ **Limite removido!** Agora o bot pode mandar mensagem em **qualquer canal**.")
+        return
+    if canal is None:
+        atual = canal_limitado(ctx.guild.id) if ctx.guild else None
+        if atual:
+            await ctx.send(f"ℹ️ O bot ta limitado so no canal <#{atual}>.\nPra trocar: `!limitar #outro-canal`\nPra tirar o limite: `!limitar off`")
+        else:
+            await ctx.send(f"ℹ️ O bot **nao ta limitado** - ele pode mandar mensagem em qualquer canal.\nPra limitar: `!limitar #canal-do-x1`")
+        return
+    definir_canal_limitado(ctx.guild.id, canal.id)
+    await ctx.send(f"🔒 **Bot limitado!** Agora o bot so vai mandar mensagem no canal {canal.mention}.\nNos outros canais ele vai ficar quieto.\nPra tirar o limite: `!limitar off`")
+
+@limitar.error
+async def limitar_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send(f"{ctx.author.mention} So **ADM** pode usar esse comando! 🔒")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"{ctx.author.mention} Usa assim: `!limitar #canal` ou `!limitar off`")
+
+# Trava global: se o ADM limitou um canal, os outros comandos do X1 so funcionam la
+@bot.check
+async def so_no_canal_limitado(ctx):
+    if ctx.guild is None:
+        return True
+    if ctx.command and ctx.command.name == "limitar":
+        return True
+    limite = canal_limitado(ctx.guild.id)
+    if limite and ctx.channel.id != limite:
+        return False
+    return True
+
+@bot.event
+async def on_command_error(ctx, error):
+    # Se o comando foi bloqueado pelo limite de canal, ignora quieto (nao manda erro no canal errado)
+    if isinstance(error, commands.CheckFailure):
+        return
+    raise error
 
 # ===== RESGATAR PERSONAGEM =====
 async def tentar_resgatar(ctx, user, codigo):
