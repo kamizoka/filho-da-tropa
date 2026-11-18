@@ -1,7 +1,11 @@
 {
   "1015291342844334162": {
-    "inventario": [],
-    "equipado": null,
-    "codigos_usados": []
+    "inventario": [
+      "minghar"
+    ],
+    "equipado": "minghar",
+    "codigos_usados": [
+      "MING-HAR"
+    ]
   }
 }
