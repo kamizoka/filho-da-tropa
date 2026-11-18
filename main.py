@@ -65,7 +65,17 @@ PERSONAGENS = {
         # QUANDO TU MANDAR A IMAGEM DA CARTA, cola o link aqui dentro das aspas:
         "imagem": "https://raw.githubusercontent.com/Kamizoka/filho-da-tropa/main/anne.png",
     },
-    # Personagem 2 ate 20 entram aqui quando tu criar.
+    "minghar": {
+        "id": "minghar",
+        "nome": "Escudeiro Ming Har",
+        "ataque": 3,
+        "defesa": 10,
+        "cura": 7,
+        "codigo": "MING-HAR",
+        "especial": "Recebe 15% a menos de dano nos primeiros 2 ataques do oponente.",
+        "imagem": "https://raw.githubusercontent.com/Kamizoka/filho-da-tropa/main/minghar.png",
+    },
+    # Personagem 3 ate 20 entram aqui quando tu criar.
 }
 
 # Atalho: codigo -> id do personagem (maiusculo, sem espaco)
@@ -187,6 +197,7 @@ async def ajudax1(ctx):
     embed.add_field(name="👤 Personagens", value="**!resgatarpersonagem CODIGO** ou **!rp CODIGO** - Resgata um personagem com o codigo que tu ganhou\n**!personagem** ou **!p** - Mostra o personagem que ta **equipado** (mostra a carta dele)\n**!inventario** ou **!i** - Mostra os personagens que tu tem e deixa equipar outro\n\n- Cada personagem tem **20 pontos** divididos em ataque / defesa / cura\n- Tu pode ter no maximo **3 personagens**\n- O codigo pode ser usado por todo mundo, mas **tu nao pode usar o mesmo codigo 2x**\n- Se teu inventario ja ta cheio (3), tu vai ter que **excluir um** pra resgatar outro\n- Sem personagem? Tu joga com o **Personagem Padrao: 6 / 6 / 6**", inline=False)
     embed.add_field(name="⚔️ Como funciona a batalha", value="**Vida: 200** pra cada um\nOs 2 escolhem escondido: **ATACAR / DEFENDER / CURAR**\nDepois os 2 rolam o dado juntos e o round resolve!\n\n**ATACAR:** dado 1-10, dano = **dado x ataque** do teu personagem\nEx: ataque 7 + dado 10 = **70 de dano**\n\n**DEFENDER:** dado 1-10, escudo = **dado x defesa**\nEx: defesa 9 + dado 10 = **90 de escudo**\n\n**CURAR:** dado 1-5, cura = **dado x cura**\nEx: cura 4 + dado 5 = **20 de cura**", inline=False)
     embed.add_field(name="✨ Especial da Anne bastard Family", value="Se ela usar **CURAR 2 rounds seguidos**, a cura dela aumenta **+10%** pelos proximos **2 rounds**.", inline=False)
+    embed.add_field(name="✨ Especial do Escudeiro Ming Har", value="Ele recebe **15% a menos de dano** nos primeiros **2 ataques** do oponente.", inline=False)
     embed.add_field(name="🏆 Rank / Perfil", value="**!rank** - Mostra o ranking do X1 (Top 10)\n**!perfil** - Mostra TEU perfil (vitorias, derrotas, personagem equipado)\n**!perfil @pessoa** - Mostra o perfil de outra pessoa", inline=False)
     embed.add_field(name="🏁 Quem ganha?", value="Quem zerar a vida do outro primeiro ganha!\nSe os 2 cairem no mesmo round, da **EMPATE**!", inline=False)
     await ctx.send(embed=embed)
@@ -459,7 +470,7 @@ class AceitarView(discord.ui.View):
             await interaction.message.delete()
         except:
             pass
-        x1_jogo = {"jogadores": [self.desafiante, jogador2], "vida": [200, 200], "escolhas": {}, "dados": {}, "round": 1, "painel_msg": None, "resolvendo": False, "painel_rolar_enviado": False, "rounds_resolvidos": set(), "personagens": [PERSONAGEM_PADRAO, PERSONAGEM_PADRAO], "equip_choices": {}, "cura_consecutiva": [0, 0], "buff_cura": [0, 0]}
+        x1_jogo = {"jogadores": [self.desafiante, jogador2], "vida": [200, 200], "escolhas": {}, "dados": {}, "round": 1, "painel_msg": None, "resolvendo": False, "painel_rolar_enviado": False, "rounds_resolvidos": set(), "personagens": [PERSONAGEM_PADRAO, PERSONAGEM_PADRAO], "equip_choices": {}, "cura_consecutiva": [0, 0], "buff_cura": [0, 0], "ataques_recebidos": [0, 0]}
         # Cada jogador escolhe o personagem no painel dele
         await self.canal.send(f"⚔️ **X1 VAI COMECAR!**\n{self.desafiante.mention} VS {jogador2.mention}\nCada um escolhe o personagem no painel dele ai embaixo!")
         for idx, jogador in enumerate([self.desafiante, jogador2]):
@@ -661,13 +672,26 @@ class RolarSimultaneoView(discord.ui.View):
         dano_final = [0, 0]
         dano_final[0] = max(0, dano_bruto[1] - escudo[0])
         dano_final[1] = max(0, dano_bruto[0] - escudo[1])
+        # ===== ESPECIAL DO MING HAR: -15% nos primeiros 2 ataques do oponente =====
+        especial_ming = [False, False]
+        for i, char in enumerate([c0, c1]):
+            atacante = 1 - i
+            esc_atacante = e0 if atacante == 0 else e1
+            if char["id"] == "minghar" and jogo["ataques_recebidos"][i] < 2:
+                if esc_atacante == "atacar" and dano_final[i] > 0:
+                    dano_final[i] = round(dano_final[i] * 0.85)
+                    especial_ming[i] = True
+        if e0 == "atacar":
+            jogo["ataques_recebidos"][1] += 1
+        if e1 == "atacar":
+            jogo["ataques_recebidos"][0] += 1
         escudo_usado = [min(escudo[0], dano_bruto[1]), min(escudo[1], dano_bruto[0])]
         jogo["vida"][0] = max(0, min(200, jogo["vida"][0] - dano_final[0] + cura[0]))
         jogo["vida"][1] = max(0, min(200, jogo["vida"][1] - dano_final[1] + cura[1]))
         nomes = {"atacar": "ATACOU ⚔️", "defender": "DEFENDEU 🛡️", "curar": "CUROU 💚"}
         embed = discord.Embed(title=f"💥 **RESULTADO DO ROUND {jogo['round']}!** 💥", color=0xFF0000)
-        txt0 = f"**Dado:** {d0}\n**Escudo:** {escudo[0]}\n**Cura:** +{cura[0]}" + (" ✨ **+10% especial!**" if buff_usado[0] else "") + f"\n**Dano que deu:** {dano_bruto[0]} (segurado: {escudo_usado[1]})\n**Dano que tomou:** {dano_final[0]}"
-        txt1 = f"**Dado:** {d1}\n**Escudo:** {escudo[1]}\n**Cura:** +{cura[1]}" + (" ✨ **+10% especial!**" if buff_usado[1] else "") + f"\n**Dano que deu:** {dano_bruto[1]} (segurado: {escudo_usado[0]})\n**Dano que tomou:** {dano_final[1]}"
+        txt0 = f"**Dado:** {d0}\n**Escudo:** {escudo[0]}\n**Cura:** +{cura[0]}" + (" ✨ **+10% especial!**" if buff_usado[0] else "") + (" 🛡️ **-15% especial Ming Har!**" if especial_ming[0] else "") + f"\n**Dano que deu:** {dano_bruto[0]} (segurado: {escudo_usado[1]})\n**Dano que tomou:** {dano_final[0]}"
+        txt1 = f"**Dado:** {d1}\n**Escudo:** {escudo[1]}\n**Cura:** +{cura[1]}" + (" ✨ **+10% especial!**" if buff_usado[1] else "") + (" 🛡️ **-15% especial Ming Har!**" if especial_ming[1] else "") + f"\n**Dano que deu:** {dano_bruto[1]} (segurado: {escudo_usado[0]})\n**Dano que tomou:** {dano_final[1]}"
         embed.add_field(name=f"**{p0.display_name}** - {nomes[e0]} ({c0['nome']})", value=txt0, inline=False)
         embed.add_field(name=f"**{p1.display_name}** - {nomes[e1]} ({c1['nome']})", value=txt1, inline=False)
         embed.add_field(name="❤️ **Vida agora**", value=f"**{p0.display_name}:** {barra_vida(jogo['vida'][0])}\n**{p1.display_name}:** {barra_vida(jogo['vida'][1])}", inline=False)
