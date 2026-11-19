@@ -27,8 +27,12 @@
     ]
   },
   "1570176821004345403": {
-    "inventario": [],
-    "equipado": null,
-    "codigos_usados": []
+    "inventario": [
+      "anne"
+    ],
+    "equipado": "anne",
+    "codigos_usados": [
+      "ANNE-BASTARD"
+    ]
   }
 }
