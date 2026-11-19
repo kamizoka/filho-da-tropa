@@ -1,11 +1,13 @@
 {
   "1015291342844334162": {
     "inventario": [
-      "minghar"
+      "minghar",
+      "anne"
     ],
     "equipado": "minghar",
     "codigos_usados": [
-      "MING-HAR"
+      "MING-HAR",
+      "ANNE-BASTARD"
     ]
   },
   "1566261638024405235": {
