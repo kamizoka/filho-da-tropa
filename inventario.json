@@ -17,11 +17,13 @@
   },
   "949673740000718878": {
     "inventario": [
-      "anne"
+      "anne",
+      "minghar"
     ],
     "equipado": "anne",
     "codigos_usados": [
-      "ANNE-BASTARD"
+      "ANNE-BASTARD",
+      "MING-HAR"
     ]
   }
 }
