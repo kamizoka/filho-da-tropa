@@ -48,8 +48,12 @@
     "codigos_usados": []
   },
   "747657198557200425": {
-    "inventario": [],
-    "equipado": null,
-    "codigos_usados": []
+    "inventario": [
+      "minghar"
+    ],
+    "equipado": "minghar",
+    "codigos_usados": [
+      "MING-HAR"
+    ]
   }
 }
